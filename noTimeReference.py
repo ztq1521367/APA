@@ -90,7 +90,7 @@ def calAvoidBarrierPoint(parkL, parkW, carInfo):
     barrierAngle = 0.43633 #0.523333     #0.35
     return barrierX, barrierY, barrierAngle
 
-def calContrlPoint(parkL, parkW, startX, startY, startAngle):
+def calContrlPoint(params): #parkL, parkW, startX, startY, startAngle):
     """
     计算输出的起始点坐标，避障点坐标，终止点坐标
     parkL:车位长
@@ -102,21 +102,15 @@ def calContrlPoint(parkL, parkW, startX, startY, startAngle):
 
     ctrlPoint = {}
 
-    carInfo = car(carWidth, carLen, frontLen, rearLen, axialLen, axialDistance, maxWheelAngle)
-    barrierX, barrierY, barrierAngle = calAvoidBarrierPoint(parkL, parkW, carInfo)
-
-    endX = safeDistance + rearLen
-    endY = -parkW / 2
-
-    ctrlPoint['startX'] = startX
-    ctrlPoint['startY'] = startY
-    ctrlPoint['startAngle'] = startAngle
-    ctrlPoint['barrierX'] = barrierX
-    ctrlPoint['barrierY'] = barrierY
-    ctrlPoint['barrierAngle'] = barrierAngle
-    ctrlPoint['endX'] = endX
-    ctrlPoint['endY'] = endY
-    ctrlPoint['endAngle'] = 0
+    ctrlPoint['startX'] = params['startX']
+    ctrlPoint['startY'] = params['startY']
+    ctrlPoint['startAngle'] = params['startAngle']
+    ctrlPoint['barrierX'] = params['barrierX']
+    ctrlPoint['barrierY'] = params['barrierY']
+    ctrlPoint['barrierAngle'] = params['barrierAngle']
+    ctrlPoint['endX'] = params['endX']
+    ctrlPoint['endY'] = params['endY']
+    ctrlPoint['endAngle'] = params['endAngle']
     
     return ctrlPoint
 
@@ -291,7 +285,7 @@ def notTimeCtrl(thetar,theta, yr, y, curvature): #pDiff, caDiff
     print('outCtrl: ', outCtrl)
     return outCtrl
 
-def mulPointCtrl(theta, thetaq, x, xq, y, yq, flag):
+def mulPointCtrl(theta, thetaq, xx, xqq, yy, yqq, flag):
     """
     多点控制算法
     """
@@ -299,16 +293,16 @@ def mulPointCtrl(theta, thetaq, x, xq, y, yq, flag):
     k4 = 100
     xzAlg = 0.523598767
     #围绕坐标原点做旋转  rax0Circle[0]*cosHxAngle-rax0Circle[1]*sinHxAngle, rax0Circle[0]*sinHxAngle+rax0Circle[1]*cosHxAngle
-    '''
+
     x = xx*math.cos(xzAlg) - yy*math.sin(xzAlg)
     y = xx*math.sin(xzAlg) + yy*math.cos(xzAlg)
 
     xq = xqq*math.cos(xzAlg) - yqq*math.sin(xzAlg)
-    yq = xqq*math.sin(xzAlg) - yqq*math.cos(xzAlg)
+    yq = xqq*math.sin(xzAlg) + yqq*math.cos(xzAlg)
     
     thetaq += xzAlg
     theta += xzAlg
-    '''
+
     xe = (x - xq) * math.cos(thetaq) + (y - yq) * math.sin(thetaq)
     ye = (y - yq) * math.cos(thetaq) - (x - xq) * math.sin(thetaq)
     thetae = theta - thetaq
@@ -330,7 +324,7 @@ def mulPointCtrl(theta, thetaq, x, xq, y, yq, flag):
     return outCtrl
 
 
-def apaTest(adaptationParam, startAngle, mohuMatrix, sleepFlag, ctrlFlag):
+def apaTest(adaptationParam, sleepFlag, ctrlFlag):
     """
     水平泊车位测试
     adaptationParam = startP, p1, xlp,
@@ -338,33 +332,34 @@ def apaTest(adaptationParam, startAngle, mohuMatrix, sleepFlag, ctrlFlag):
     global hxAngle, raxPoint, safeDistance, rearLen
 
     #pdb.set_trace() #debug调试
-    startP = adaptationParam[0]
-    p1 = adaptationParam[1]
-    xlp = adaptationParam[2]
-    xlp2 = adaptationParam[3]
-    lineTmp = adaptationParam[4]
-    lineTmp1 = adaptationParam[5]
+    startInfo = adaptationParam[0]
+    endInfo = adaptationParam[1]
+    lineTmp = adaptationParam[2]
+    lineTmp1 = adaptationParam[3]
+    if ctrlFlag is True:
+        p1 = adaptationParam[4]
+        xlp = adaptationParam[5]
+        xlp2 = adaptationParam[6]
 
     outCtrl = 0
 
-    hxAngle = startAngle
-    raxPoint = copy.deepcopy(startP)
+    hxAngle = startInfo[2]
+    raxPoint[0] = startInfo[0]
+    raxPoint[1] = startInfo[1]
     #raxPoint = [1.2,-1.5]
 
     conDiff = 0
     angleDiff = 0
     mvs = 0
+    if ctrlFlag is False:
+        if raxPoint[0] < endInfo[0]:
+            dirFlag = True
+        else:
+            dirFlag = False
 
-    if raxPoint[0] < xlp:
-        dirFlag = True
-    else:
-        dirFlag = False
-
-    #print('move start ')
-    limit = xlp #safeDistance + rearLen
     clearFlag = True
     while 1:
-        if raxPoint[0] <= limit: #mvs >= 8.0: # >= startP[0]: #
+        if raxPoint[1] <= endInfo[1]: #mvs >= 8.0: # >= startP[0]: #
            break
         if ctrlFlag is True:
 
@@ -388,14 +383,14 @@ def apaTest(adaptationParam, startAngle, mohuMatrix, sleepFlag, ctrlFlag):
                 apaTest.maxK = [abs(k), raxPoint[0]] 
             print('maxK: ', apaTest.maxK)
         else:
-            outCtrl = mulPointCtrl(hxAngle, p1, raxPoint[0], xlp, raxPoint[1], xlp2, dirFlag)
+            outCtrl = mulPointCtrl(hxAngle, endInfo[2], raxPoint[0], endInfo[0], raxPoint[1], endInfo[1], dirFlag)
 
         mvs += abs(carMove(tyreAngle = outCtrl, speed = -0.0005, line = lineTmp, line1 = lineTmp1, clearFlag = clearFlag))#-0.000833333
         clearFlag = False
 
         #pdb.set_trace() #debug调试
         if sleepFlag is True:
-            time.sleep(0.01)
+            time.sleep(0.001)
 
     return conDiff, angleDiff
 
@@ -410,88 +405,77 @@ def ycBegin(params, ax, ax1):
     line1, = ax1.plot([], [], '-', linewidth=1, color='g')
     line2, = ax1.plot([], [], '-', linewidth=1, color='b')
 
-    #startx = np.arange(params['startXs'], params['startXe'], 0) #0.1)
-    #starty = np.arange(params['startYs'], params['startYe'], 0) #0.1)
-
     #路径拟合
     p1 = []
     xlp = []
     xlp2 = []
-    startPoint = []
-    count = 0
-    iny = params['startYs']
-    inx = params['startXs']
-    #for iny in starty:
-        #for inx in startx:
 
-    ctrlPoint = calContrlPoint(params['parkL'], params['parkW'], inx, iny, params['startAngles'])
-    ctrlPoint['endAngle'] = params['endAngles']
+    ctrlPoint = calContrlPoint(params)
     ifAvoid = 'yes'
     plotCoeff = solve(ctrlPoint, ifAvoid, ax1)
-    startPoint.append([inx, iny])
     #多项式计算
     p1.append(np.poly1d(plotCoeff))
- 
+
     xlp.append(lambda x: 5*plotCoeff[0]*pow(x,4) + 4*plotCoeff[1]*pow(x,3) + 3*plotCoeff[2]*pow(x,2) + 2*plotCoeff[3]*x + plotCoeff[4])
     xlp2.append(lambda x: 20*plotCoeff[0]*pow(x,3) + 12*plotCoeff[1]*pow(x,2) + 6*plotCoeff[2]*x + 2*plotCoeff[3])
 
-    count+=1
+    ctrlType = True #False #多控制点
+ 
+    startInfo = [ctrlPoint['startX'], ctrlPoint['startY'], ctrlPoint['startAngle']]
+    endInfo = [ctrlPoint['endX'], ctrlPoint['endY'], ctrlPoint['endAngle']]
 
-    ctrlType = False #多控制点
+    if ctrlType is False:
+        xx = np.arange(ctrlPoint['endX'], ctrlPoint['startX'], 0.01) 
+        pp1=p1[0](xx)
 
-    for j in range(count): 
-        if ctrlType is False:
-            xx = np.arange(safeDistance + rearLen, startPoint[j][0], 0.01) 
-            pp1=p1[j](xx)
+        line2.set_data(xx,pp1)
 
-            line2.set_data(xx,pp1)
-            apaTest((startPoint[j], p1[j], xlp[j], xlp2[j], line, line1), params['startAngles'], None, True, True)
-        else:
-            apaTest((startPoint[j], ctrlPoint['endAngle'], ctrlPoint['endX'], ctrlPoint['endY'], line, line1), params['startAngles'], None, True, False)
-        plt.draw()
+        apaTest((startInfo, endInfo, line, line1, p1[0], xlp[0], xlp2[0]), True, True)
+    else:
+        drawP = [[startInfo[0], endInfo[0]], [startInfo[1], endInfo[1]]]
 
-    print('learn complete ')
-
-
-def mulPointCtrlZ(params, ax, ax1):
-    """
-    使用多点控制的路径跟踪算法
-    """
-    line, = ax1.plot([], [], '-', linewidth=1, color='r')
-    line1, = ax1.plot([], [], '-', linewidth=1, color='g')
-    #line2, = ax1.plot([], [], '.', linewidth=1, color='b')
-    #ax.plot(xlist,ylist,color='m',linestyle='',marker='.',label=u'lhdata')
-    startPoint = [params['startXs'], params['startYs']]
-    startAngle = params['startAngles']
-    distPoint = [params['endX'], params['endY']]
-    distAngle = params['endAngles']
-
-    drawP = [[startPoint[0], distPoint[0]], [startPoint[1], distPoint[1]]]
-
-    ax1.plot(drawP[0],drawP[1],color='b',linestyle='',marker='.',label=u'lhdata')
-    apaTest((startPoint, distAngle, distPoint[0], distPoint[1], line, line1), startAngle, None, True, False)
+        ax1.plot(drawP[0],drawP[1],color='b',linestyle='',marker='.',label=u'lhdata')
+        apaTest((startInfo, endInfo, line, line1), True, False)
+    plt.draw()
 
 def main(params):
 
     fig = plt.figure(figsize = [10,10])
     #ax = fig.add_subplot(2,1,1,xlim=(-5, 15), ylim=(-5, 15))
-    ax1 = fig.add_subplot(1,1,1,xlim=(0, 10), ylim=(-5, 5))
-    t = Thread(target = mulPointCtrlZ, args=(params, None, ax1))#ycBegin
+    ax1 = fig.add_subplot(1,1,1,xlim=(-10, 10), ylim=(-10, 10))
+    t = Thread(target = ycBegin, args=(params, None, ax1))#ycBegin     mulPointCtrlZ
     t.start()
     plt.show()          
 
 if __name__ == '__main__':
+    
     params = {
         'parkL': 7.5,
         'parkW': 3,
-        'startXs': 9.5, #6.5, #7.5,
-        'startYs': 1.4, #1.6, #1.0,
-        'startAngles': 0.1,
-        'startXe': 8.5, #9.5,
-        'startYe': 1.4, #2.0,
-        'startAnglee': 0,
-        'endX':6.5,#1.5,
-        'endY':1.0,#-4.0,
-        'endAngles':0.2 #1.221730456
+        'startX': 7.5, #6.5, #7.5,
+        'startY': 5.4, #1.6, #1.0,
+        'startAngle': 1.553343008, #0.0,
+        'barrierX': 2.9,
+        'barrierY':-1,
+        'barrierAngle': 0.43633,
+        'endX':7.1,#1.5,
+        'endY':1.4,#-4.0,
+        'endAngle':1.553343008 #1.221730456
     }
+    '''
+    params = {
+        'parkL': 7.5,
+        'parkW': 3,
+        'startX': 8.5, #6.5, #7.5,
+        'startY': 1.4, #1.6, #1.0,
+        'startAngle': 0.0, #0.0,
+        'barrierX': 2.9,
+        'barrierY':-1,
+        'barrierAngle': 0.43633,
+        'endX':1.2,#1.5,
+        'endY':-1.5,#-4.0,
+        'endAngle':0 #1.221730456
+    }
+    '''
     main(params)
+    
