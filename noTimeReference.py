@@ -36,6 +36,7 @@ maxWheelAngle = 40          #最大车轮转角
 zPointX = 2.9               #避障点x坐标
 zPointY = -0.91             #避障点y坐标
 zAngle = 30                 #避障点的航向角
+carSpeed = -0.0005
 
 carSize = [4.8, 1.8]
 
@@ -266,14 +267,15 @@ def notTimeCtrl(thetar,theta, yr, y, curvature): #pDiff, caDiff
     """
     k1 = 200 #180
     k2 = 100 #160
+    maxAngle = 0.698131689
     expression1 = axialDistance*pow(math.cos(theta), 3)
     expression2 = k1*(yr-y)-k2*(math.tan(thetar)-math.tan(theta))#倒车用-k2  前进用+k2
     expression3 = (math.cos(thetar)**2)*math.cos(theta)
     outCtrl = expression1 * (expression2 + curvature/expression3)
-    if outCtrl > 0.698131689:
-        outCtrl = 0.698131689
-    elif outCtrl < -0.698131689:
-        outCtrl = -0.698131689
+    if outCtrl > maxAngle:
+        outCtrl = maxAngle
+    elif outCtrl < -maxAngle:
+        outCtrl = -maxAngle
     '''
     if not hasattr(notTimeCtrl, 'maxK'):
         notTimeCtrl.maxK = 0
@@ -285,12 +287,48 @@ def notTimeCtrl(thetar,theta, yr, y, curvature): #pDiff, caDiff
     print('outCtrl: ', outCtrl)
     return outCtrl
 
-def mulPointCtrl(theta, thetaq, xx, xqq, yy, yqq, flag):
+def pointXz(param):
+    '''
+    params = {
+        'parkL': 7.5,
+        'parkW': 3,
+        'startX': 7.5, #6.5, #7.5,
+        'startY': 5.4, #1.6, #1.0,
+        'startAngle': 1.553343008, #0.0,
+        'barrierX': 2.9,
+        'barrierY':-1,
+        'barrierAngle': 0.43633,
+        'endX':7.1,#1.5,
+        'endY':1.4,#-4.0,
+        'endAngle':1.553343008 #1.221730456
+    }
+    '''
+    xzAlg = -0.436332306 #0.523598767
+    cosVal = math.cos(xzAlg)
+    sinVal = math.sin(xzAlg)
+    paramTmp = copy.deepcopy(param)
+    paramTmp['startX'] = param['startX']*cosVal - param['startY']*sinVal
+    paramTmp['startY'] = param['startX']*sinVal + param['startY']*cosVal
+    paramTmp['startAngle'] += xzAlg
+
+    paramTmp['barrierX'] = param['barrierX']*cosVal - param['barrierY']*sinVal
+    paramTmp['barrierY'] = param['barrierX']*sinVal + param['barrierY']*cosVal
+    paramTmp['barrierAngle'] += xzAlg
+
+    paramTmp['endX'] = param['endX']*cosVal - param['endY']*sinVal
+    paramTmp['endY'] = param['endX']*sinVal + param['endY']*cosVal
+    paramTmp['endAngle'] += xzAlg
+
+    return paramTmp
+
+
+def mulPointCtrl(theta, thetaq, x, xq, y, yq, flag):
     """
     多点控制算法
     """
     k3 = 200
     k4 = 100
+    '''
     xzAlg = 0.523598767
     #围绕坐标原点做旋转  rax0Circle[0]*cosHxAngle-rax0Circle[1]*sinHxAngle, rax0Circle[0]*sinHxAngle+rax0Circle[1]*cosHxAngle
 
@@ -302,7 +340,8 @@ def mulPointCtrl(theta, thetaq, xx, xqq, yy, yqq, flag):
     
     thetaq += xzAlg
     theta += xzAlg
-
+    '''
+    maxAngle = 0.698131689
     xe = (x - xq) * math.cos(thetaq) + (y - yq) * math.sin(thetaq)
     ye = (y - yq) * math.cos(thetaq) - (x - xq) * math.sin(thetaq)
     thetae = theta - thetaq
@@ -316,10 +355,10 @@ def mulPointCtrl(theta, thetaq, xx, xqq, yy, yqq, flag):
 
     outCtrl = math.atan(expression1 * expression2)
 
-    if outCtrl > 0.698131689:
-        outCtrl = 0.698131689
-    elif outCtrl < -0.698131689:
-        outCtrl = -0.698131689
+    if outCtrl > maxAngle:
+        outCtrl = maxAngle
+    elif outCtrl < -maxAngle:
+        outCtrl = -maxAngle
 
     return outCtrl
 
@@ -329,7 +368,7 @@ def apaTest(adaptationParam, sleepFlag, ctrlFlag):
     水平泊车位测试
     adaptationParam = startP, p1, xlp,
     """
-    global hxAngle, raxPoint, safeDistance, rearLen
+    global hxAngle, raxPoint, safeDistance, rearLen, carSpeed
 
     #pdb.set_trace() #debug调试
     startInfo = adaptationParam[0]
@@ -343,19 +382,18 @@ def apaTest(adaptationParam, sleepFlag, ctrlFlag):
 
     outCtrl = 0
 
-    hxAngle = startInfo[2]
     raxPoint[0] = startInfo[0]
     raxPoint[1] = startInfo[1]
-    #raxPoint = [1.2,-1.5]
+    hxAngle = startInfo[2]
 
     conDiff = 0
     angleDiff = 0
     mvs = 0
     if ctrlFlag is False:
-        if raxPoint[0] < endInfo[0]:
-            dirFlag = True
-        else:
+        if carSpeed < 0:
             dirFlag = False
+        else:
+            dirFlag = True
 
     clearFlag = True
     while 1:
@@ -385,7 +423,7 @@ def apaTest(adaptationParam, sleepFlag, ctrlFlag):
         else:
             outCtrl = mulPointCtrl(hxAngle, endInfo[2], raxPoint[0], endInfo[0], raxPoint[1], endInfo[1], dirFlag)
 
-        mvs += abs(carMove(tyreAngle = outCtrl, speed = -0.0005, line = lineTmp, line1 = lineTmp1, clearFlag = clearFlag))#-0.000833333
+        mvs += abs(carMove(tyreAngle = outCtrl, speed = carSpeed, line = lineTmp, line1 = lineTmp1, clearFlag = clearFlag))#-0.000833333
         clearFlag = False
 
         #pdb.set_trace() #debug调试
@@ -409,8 +447,9 @@ def ycBegin(params, ax, ax1):
     p1 = []
     xlp = []
     xlp2 = []
-
-    ctrlPoint = calContrlPoint(params)
+    
+    ctrlPointTmp = calContrlPoint(params)
+    ctrlPoint = pointXz(ctrlPointTmp)
     ifAvoid = 'yes'
     plotCoeff = solve(ctrlPoint, ifAvoid, ax1)
     #多项式计算
@@ -419,15 +458,15 @@ def ycBegin(params, ax, ax1):
     xlp.append(lambda x: 5*plotCoeff[0]*pow(x,4) + 4*plotCoeff[1]*pow(x,3) + 3*plotCoeff[2]*pow(x,2) + 2*plotCoeff[3]*x + plotCoeff[4])
     xlp2.append(lambda x: 20*plotCoeff[0]*pow(x,3) + 12*plotCoeff[1]*pow(x,2) + 6*plotCoeff[2]*x + 2*plotCoeff[3])
 
-    ctrlType = True #False #多控制点
- 
     startInfo = [ctrlPoint['startX'], ctrlPoint['startY'], ctrlPoint['startAngle']]
     endInfo = [ctrlPoint['endX'], ctrlPoint['endY'], ctrlPoint['endAngle']]
 
-    if ctrlType is False:
+    if params['ctrlType'] is False:
         xx = np.arange(ctrlPoint['endX'], ctrlPoint['startX'], 0.01) 
         pp1=p1[0](xx)
 
+        drawP = [[ctrlPoint['startX'], ctrlPoint['barrierX'], ctrlPoint['endX']], [ctrlPoint['startY'], ctrlPoint['barrierY'], ctrlPoint['endY']]]
+        ax1.plot(drawP[0],drawP[1],color='b',linestyle='',marker='.',label=u'lhdata')
         line2.set_data(xx,pp1)
 
         apaTest((startInfo, endInfo, line, line1, p1[0], xlp[0], xlp2[0]), True, True)
@@ -448,7 +487,8 @@ def main(params):
     plt.show()          
 
 if __name__ == '__main__':
-    
+    '''
+    #多点控制
     params = {
         'parkL': 7.5,
         'parkW': 3,
@@ -460,9 +500,12 @@ if __name__ == '__main__':
         'barrierAngle': 0.43633,
         'endX':7.1,#1.5,
         'endY':1.4,#-4.0,
-        'endAngle':1.553343008 #1.221730456
+        'endAngle':1.553343008, #1.221730456
+        'ctrlType':True
     }
     '''
+    '''
+    #侧方位停车
     params = {
         'parkL': 7.5,
         'parkW': 3,
@@ -474,8 +517,25 @@ if __name__ == '__main__':
         'barrierAngle': 0.43633,
         'endX':1.2,#1.5,
         'endY':-1.5,#-4.0,
-        'endAngle':0 #1.221730456
+        'endAngle':0, #1.221730456
+        'ctrlType':False
     }
     '''
-    main(params)
     
+    #垂直泊车
+    params = {
+        'parkL': 7.5,
+        'parkW': 3,
+        'startX': 8.5, #7.5,
+        'startY': 2.0, #1.0,
+        'startAngle': 0.0, #0.0,
+        'barrierX': 5.5,
+        'barrierY': 0.4,
+        'barrierAngle': 0.8, #1.221730456,
+        'endX':4,#1.5,
+        'endY':-6,#-4.0,
+        'endAngle':1.5707963, #1.221730456
+        'ctrlType':False
+    }  
+    
+    main(params)
