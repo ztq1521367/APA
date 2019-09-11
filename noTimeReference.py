@@ -36,7 +36,6 @@ maxWheelAngle = 40          #最大车轮转角
 zPointX = 2.9               #避障点x坐标
 zPointY = -0.91             #避障点y坐标
 zAngle = 30                 #避障点的航向角
-carSpeed = -0.0005
 
 carSize = [4.8, 1.8]
 
@@ -287,7 +286,7 @@ def notTimeCtrl(thetar,theta, yr, y, curvature): #pDiff, caDiff
     print('outCtrl: ', outCtrl)
     return outCtrl
 
-def pointXz(param):
+def pointXz(param, xzAlg):
     '''
     params = {
         'parkL': 7.5,
@@ -303,7 +302,6 @@ def pointXz(param):
         'endAngle':1.553343008 #1.221730456
     }
     '''
-    xzAlg = -0.436332306 #0.523598767
     cosVal = math.cos(xzAlg)
     sinVal = math.sin(xzAlg)
     paramTmp = copy.deepcopy(param)
@@ -328,19 +326,7 @@ def mulPointCtrl(theta, thetaq, x, xq, y, yq, flag):
     """
     k3 = 200
     k4 = 100
-    '''
-    xzAlg = 0.523598767
-    #围绕坐标原点做旋转  rax0Circle[0]*cosHxAngle-rax0Circle[1]*sinHxAngle, rax0Circle[0]*sinHxAngle+rax0Circle[1]*cosHxAngle
 
-    x = xx*math.cos(xzAlg) - yy*math.sin(xzAlg)
-    y = xx*math.sin(xzAlg) + yy*math.cos(xzAlg)
-
-    xq = xqq*math.cos(xzAlg) - yqq*math.sin(xzAlg)
-    yq = xqq*math.sin(xzAlg) + yqq*math.cos(xzAlg)
-    
-    thetaq += xzAlg
-    theta += xzAlg
-    '''
     maxAngle = 0.698131689
     xe = (x - xq) * math.cos(thetaq) + (y - yq) * math.sin(thetaq)
     ye = (y - yq) * math.cos(thetaq) - (x - xq) * math.sin(thetaq)
@@ -363,12 +349,12 @@ def mulPointCtrl(theta, thetaq, x, xq, y, yq, flag):
     return outCtrl
 
 
-def apaTest(adaptationParam, sleepFlag, ctrlFlag):
+def apaTest(adaptationParam, mvSpeed, sleepFlag, ctrlFlag):
     """
     水平泊车位测试
     adaptationParam = startP, p1, xlp,
     """
-    global hxAngle, raxPoint, safeDistance, rearLen, carSpeed
+    global hxAngle, raxPoint, safeDistance, rearLen
 
     #pdb.set_trace() #debug调试
     startInfo = adaptationParam[0]
@@ -390,7 +376,7 @@ def apaTest(adaptationParam, sleepFlag, ctrlFlag):
     angleDiff = 0
     mvs = 0
     if ctrlFlag is False:
-        if carSpeed < 0:
+        if mvSpeed < 0:
             dirFlag = False
         else:
             dirFlag = True
@@ -423,7 +409,7 @@ def apaTest(adaptationParam, sleepFlag, ctrlFlag):
         else:
             outCtrl = mulPointCtrl(hxAngle, endInfo[2], raxPoint[0], endInfo[0], raxPoint[1], endInfo[1], dirFlag)
 
-        mvs += abs(carMove(tyreAngle = outCtrl, speed = carSpeed, line = lineTmp, line1 = lineTmp1, clearFlag = clearFlag))#-0.000833333
+        mvs += abs(carMove(tyreAngle = outCtrl, speed = mvSpeed, line = lineTmp, line1 = lineTmp1, clearFlag = clearFlag))#-0.000833333
         clearFlag = False
 
         #pdb.set_trace() #debug调试
@@ -447,9 +433,9 @@ def ycBegin(params, ax, ax1):
     p1 = []
     xlp = []
     xlp2 = []
-    
+    xzAlg = params['xzAlg'] #-0.436332306 #0.523598767
     ctrlPointTmp = calContrlPoint(params)
-    ctrlPoint = pointXz(ctrlPointTmp)
+    ctrlPoint = pointXz(ctrlPointTmp, xzAlg)
     ifAvoid = 'yes'
     plotCoeff = solve(ctrlPoint, ifAvoid, ax1)
     #多项式计算
@@ -469,12 +455,12 @@ def ycBegin(params, ax, ax1):
         ax1.plot(drawP[0],drawP[1],color='b',linestyle='',marker='.',label=u'lhdata')
         line2.set_data(xx,pp1)
 
-        apaTest((startInfo, endInfo, line, line1, p1[0], xlp[0], xlp2[0]), True, True)
+        apaTest((startInfo, endInfo, line, line1, p1[0], xlp[0], xlp2[0]), params['carSpeed'], True, True)
     else:
         drawP = [[startInfo[0], endInfo[0]], [startInfo[1], endInfo[1]]]
 
         ax1.plot(drawP[0],drawP[1],color='b',linestyle='',marker='.',label=u'lhdata')
-        apaTest((startInfo, endInfo, line, line1), True, False)
+        apaTest((startInfo, endInfo, line, line1), params['carSpeed'], True, False)
     plt.draw()
 
 def main(params):
@@ -492,15 +478,17 @@ if __name__ == '__main__':
     params = {
         'parkL': 7.5,
         'parkW': 3,
-        'startX': 7.5, #6.5, #7.5,
-        'startY': 5.4, #1.6, #1.0,
-        'startAngle': 1.553343008, #0.0,
+        'endX': 7.5, #6.5, #7.5,
+        'endY': 5.4, #1.6, #1.0,
+        'endAngle': 1.553343008, #0.0,
         'barrierX': 2.9,
-        'barrierY':-1,
+        'barrierY': -1,
         'barrierAngle': 0.43633,
-        'endX':7.1,#1.5,
-        'endY':1.4,#-4.0,
-        'endAngle':1.553343008, #1.221730456
+        'startX':7.1,#1.5,
+        'startY':1.4,#-4.0,
+        'startAngle':1.553343008, #1.221730456
+        'xzAlg':0.0,
+        'carSpeed':0.0005,
         'ctrlType':True
     }
     '''
@@ -518,10 +506,12 @@ if __name__ == '__main__':
         'endX':1.2,#1.5,
         'endY':-1.5,#-4.0,
         'endAngle':0, #1.221730456
+        'xzAlg':0.0,
+        'carSpeed':-0.0005,
         'ctrlType':False
     }
     '''
-    
+    '''
     #垂直泊车
     params = {
         'parkL': 7.5,
@@ -535,7 +525,27 @@ if __name__ == '__main__':
         'endX':4,#1.5,
         'endY':-6,#-4.0,
         'endAngle':1.5707963, #1.221730456
+        'xzAlg':-0.436332306, #旋转一定角度，避免计算tan时异常
+        'carSpeed':-0.0005,
         'ctrlType':False
-    }  
-    
+    }
+    '''
+    #斜方位泊车
+    params = {
+        'parkL': 7.5,
+        'parkW': 3,
+        'startX': 8.5, #7.5,
+        'startY': 1.0, #1.0,
+        'startAngle': 0.0, #0.0,
+        'barrierX': 5.5,
+        'barrierY': -0.2,
+        'barrierAngle': 0.8, #1.221730456,
+        'endX':3,#1.5,
+        'endY':-5,#-4.0,
+        'endAngle':1.221730456, #1.221730456
+        'xzAlg':-0.0, #旋转一定角度，避免计算tan时异常
+        'carSpeed':-0.0005,
+        'ctrlType':False
+    }
+
     main(params)
