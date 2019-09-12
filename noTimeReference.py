@@ -44,7 +44,7 @@ lrp = [-rearLen, carSize[1]/2]
 lfp = [axialDistance+frontLen, carSize[1]/2]
 rfp = [axialDistance+frontLen, -carSize[1]/2]
 
-stopFlag = 1
+stopFlag = False
 
 hxAngle = 0
 raxPoint = [0,0]
@@ -250,22 +250,20 @@ def carMove(tyreAngle = 0, speed = 0, line = None, line1 = None, clearFlag = Non
 
        line.set_data(carMove.raxList[0],carMove.raxList[1])
        line1.set_data(XX,YY)
-       plt.draw() #line.draw()
     else:
        carMove.raxList = [[],[]]
        carMove.raxList[0].append(raxPoint[0])
        carMove.raxList[1].append(raxPoint[1])
        #ax.plot(raxPoint[0],raxPoint[1],color='m',linestyle='',marker='o')
-
     return s   
 
 
-def notTimeCtrl(thetar,theta, yr, y, curvature): #pDiff, caDiff
+def notTimeCtrl(thetar,theta, yr, y, curvature):
     """
     基于非时间参考的路径跟踪控制
     """
-    k1 = 200 #180
-    k2 = 100 #160
+    k1 = 20 #200 #180
+    k2 = 10 #100 #160
     maxAngle = 0.698131689
     expression1 = axialDistance*pow(math.cos(theta), 3)
     expression2 = k1*(yr-y)-k2*(math.tan(thetar)-math.tan(theta))#倒车用-k2  前进用+k2
@@ -287,21 +285,7 @@ def notTimeCtrl(thetar,theta, yr, y, curvature): #pDiff, caDiff
     return outCtrl
 
 def pointXz(param, xzAlg):
-    '''
-    params = {
-        'parkL': 7.5,
-        'parkW': 3,
-        'startX': 7.5, #6.5, #7.5,
-        'startY': 5.4, #1.6, #1.0,
-        'startAngle': 1.553343008, #0.0,
-        'barrierX': 2.9,
-        'barrierY':-1,
-        'barrierAngle': 0.43633,
-        'endX':7.1,#1.5,
-        'endY':1.4,#-4.0,
-        'endAngle':1.553343008 #1.221730456
-    }
-    '''
+
     cosVal = math.cos(xzAlg)
     sinVal = math.sin(xzAlg)
     paramTmp = copy.deepcopy(param)
@@ -324,11 +308,11 @@ def mulPointCtrl(theta, thetaq, x, xq, y, yq, flag):
     """
     多点控制算法
     """
-    k3 = 200
-    k4 = 100
+    k3 = 20
+    k4 = 10
 
     maxAngle = 0.698131689
-    xe = (x - xq) * math.cos(thetaq) + (y - yq) * math.sin(thetaq)
+    #xe = (x - xq) * math.cos(thetaq) + (y - yq) * math.sin(thetaq)
     ye = (y - yq) * math.cos(thetaq) - (x - xq) * math.sin(thetaq)
     thetae = theta - thetaq
 
@@ -354,17 +338,18 @@ def apaTest(adaptationParam, mvSpeed, sleepFlag, ctrlFlag):
     水平泊车位测试
     adaptationParam = startP, p1, xlp,
     """
-    global hxAngle, raxPoint, safeDistance, rearLen
+    global hxAngle, raxPoint, safeDistance, rearLen, stopFlag
 
     #pdb.set_trace() #debug调试
     startInfo = adaptationParam[0]
     endInfo = adaptationParam[1]
     lineTmp = adaptationParam[2]
     lineTmp1 = adaptationParam[3]
+    lineTmp2 = adaptationParam[4]
     if ctrlFlag is True:
-        p1 = adaptationParam[4]
-        xlp = adaptationParam[5]
-        xlp2 = adaptationParam[6]
+        p1 = adaptationParam[5]
+        xlp = adaptationParam[6]
+        xlp2 = adaptationParam[7]
 
     outCtrl = 0
 
@@ -382,9 +367,23 @@ def apaTest(adaptationParam, mvSpeed, sleepFlag, ctrlFlag):
             dirFlag = True
 
     clearFlag = True
+    angleChange = []
+    xChange = []
+    distance = math.sqrt((raxPoint[0]-endInfo[0])**2 + (raxPoint[1]-endInfo[1])**2)
+    constSpeed =  mvSpeed
     while 1:
-        if raxPoint[1] <= endInfo[1]: #mvs >= 8.0: # >= startP[0]: #
+        if raxPoint[0] <= endInfo[0]: #mvs >= 8.0: # >= startP[0]: #
            break
+        if stopFlag is True:
+           break
+        tmp = math.sqrt((raxPoint[0]-endInfo[0])**2 + (raxPoint[1]-endInfo[1])**2)
+        tmpConst = distance/3
+        if tmp <= tmpConst:
+            tmp3 = tmp/tmpConst
+            if tmp3 < 0.05:
+               constSpeed = 0.05*mvSpeed 
+            else:
+               constSpeed = tmp3*mvSpeed
         if ctrlFlag is True:
 
             curY = p1(raxPoint[0])
@@ -409,9 +408,14 @@ def apaTest(adaptationParam, mvSpeed, sleepFlag, ctrlFlag):
         else:
             outCtrl = mulPointCtrl(hxAngle, endInfo[2], raxPoint[0], endInfo[0], raxPoint[1], endInfo[1], dirFlag)
 
-        mvs += abs(carMove(tyreAngle = outCtrl, speed = mvSpeed, line = lineTmp, line1 = lineTmp1, clearFlag = clearFlag))#-0.000833333
-        clearFlag = False
+        xChange.append(raxPoint[0])
+        angleChange.append(outCtrl)
 
+        lineTmp2.set_data(xChange,angleChange)
+
+        mvs += abs(carMove(tyreAngle = outCtrl, speed = constSpeed, line = lineTmp, line1 = lineTmp1, clearFlag = clearFlag))#-0.000833333
+        clearFlag = False
+        plt.draw()
         #pdb.set_trace() #debug调试
         if sleepFlag is True:
             time.sleep(0.001)
@@ -428,6 +432,7 @@ def ycBegin(params, ax, ax1):
     line, = ax1.plot([], [], '-', linewidth=1, color='r')
     line1, = ax1.plot([], [], '-', linewidth=1, color='g')
     line2, = ax1.plot([], [], '-', linewidth=1, color='b')
+    line3, = ax.plot([], [], '-', linewidth=1, color='b')
 
     #路径拟合
     p1 = []
@@ -455,22 +460,32 @@ def ycBegin(params, ax, ax1):
         ax1.plot(drawP[0],drawP[1],color='b',linestyle='',marker='.',label=u'lhdata')
         line2.set_data(xx,pp1)
 
-        apaTest((startInfo, endInfo, line, line1, p1[0], xlp[0], xlp2[0]), params['carSpeed'], True, True)
+        apaTest((startInfo, endInfo, line, line1, line3, p1[0], xlp[0], xlp2[0]), params['carSpeed'], True, True)
     else:
         drawP = [[startInfo[0], endInfo[0]], [startInfo[1], endInfo[1]]]
 
         ax1.plot(drawP[0],drawP[1],color='b',linestyle='',marker='.',label=u'lhdata')
-        apaTest((startInfo, endInfo, line, line1), params['carSpeed'], True, False)
-    plt.draw()
+        apaTest((startInfo, endInfo, line, line1, line3), params['carSpeed'], True, False)
 
 def main(params):
 
-    fig = plt.figure(figsize = [10,10])
-    #ax = fig.add_subplot(2,1,1,xlim=(-5, 15), ylim=(-5, 15))
-    ax1 = fig.add_subplot(1,1,1,xlim=(-10, 10), ylim=(-10, 10))
-    t = Thread(target = ycBegin, args=(params, None, ax1))#ycBegin     mulPointCtrlZ
+    global stopFlag
+
+    fig = plt.figure(figsize = [20,8])
+
+    ax = fig.add_subplot(1,2,1,xlim=(0, 10), ylim=(-1, 1))
+    ax.set_xticks(np.arange(0, 10, 1))
+    ax.set_yticks(np.arange(-1, 1, 0.1))
+    ax1 = fig.add_subplot(1,2,2,xlim=(0, 10), ylim=(-5, 5))
+    ax1.set_xticks(np.arange(0, 10, 1))
+    ax1.set_yticks(np.arange(-5, 5, 1))
+    ax.grid(True)
+    ax1.grid(True)
+    t = Thread(target = ycBegin, args=(params, ax, ax1))
     t.start()
-    plt.show()          
+    plt.show()
+    stopFlag = True
+              
 
 if __name__ == '__main__':
     '''
@@ -480,19 +495,19 @@ if __name__ == '__main__':
         'parkW': 3,
         'endX': 7.5, #6.5, #7.5,
         'endY': 5.4, #1.6, #1.0,
-        'endAngle': 1.553343008, #0.0,
+        'endAngle': 1.5707963, #0.0,
         'barrierX': 2.9,
         'barrierY': -1,
         'barrierAngle': 0.43633,
         'startX':7.1,#1.5,
         'startY':1.4,#-4.0,
-        'startAngle':1.553343008, #1.221730456
+        'startAngle':1.5707963, #1.221730456
         'xzAlg':0.0,
-        'carSpeed':0.0005,
+        'carSpeed':-0.001388889, #5km/h
         'ctrlType':True
     }
     '''
-    '''
+    
     #侧方位停车
     params = {
         'parkL': 7.5,
@@ -507,10 +522,10 @@ if __name__ == '__main__':
         'endY':-1.5,#-4.0,
         'endAngle':0, #1.221730456
         'xzAlg':0.0,
-        'carSpeed':-0.0005,
+        'carSpeed':-0.001388889, #5km/h
         'ctrlType':False
     }
-    '''
+    
     '''
     #垂直泊车
     params = {
@@ -526,9 +541,10 @@ if __name__ == '__main__':
         'endY':-6,#-4.0,
         'endAngle':1.5707963, #1.221730456
         'xzAlg':-0.436332306, #旋转一定角度，避免计算tan时异常
-        'carSpeed':-0.0005,
+        'carSpeed':-0.001388889, #5km/h
         'ctrlType':False
     }
+    '''
     '''
     #斜方位泊车
     params = {
@@ -544,8 +560,8 @@ if __name__ == '__main__':
         'endY':-5,#-4.0,
         'endAngle':1.221730456, #1.221730456
         'xzAlg':-0.0, #旋转一定角度，避免计算tan时异常
-        'carSpeed':-0.0005,
+        'carSpeed':-0.001388889, #5km/h
         'ctrlType':False
     }
-
+    '''
     main(params)
